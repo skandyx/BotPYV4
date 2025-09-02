@@ -1,6 +1,7 @@
 
 
 
+
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
@@ -467,7 +468,7 @@ class RealtimeAnalyzer {
         this.settings = newSettings;
     }
 
-    // Phase 1: 15m analysis to qualify pairs for the Hotlist
+    // Phase 1: 15m analysis to qualify pairs for the Hotlist (HYBRID ENGINE)
     analyze15mIndicators(symbolOrPair) {
         const symbol = typeof symbolOrPair === 'string' ? symbolOrPair : symbolOrPair.symbol;
         const pairToUpdate = typeof symbolOrPair === 'string'
@@ -477,7 +478,7 @@ class RealtimeAnalyzer {
         if (!pairToUpdate) return;
 
         const klines15m = this.klineData.get(symbol)?.get('15m');
-        if (!klines15m || klines15m.length < 21) return; // Need at least 20 for BB + 1 previous
+        if (!klines15m || klines15m.length < this.SQUEEZE_LOOKBACK) return;
 
         const old_score = pairToUpdate.score;
         const old_hotlist_status = pairToUpdate.is_on_hotlist;
@@ -495,85 +496,122 @@ class RealtimeAnalyzer {
 
         const lastCandle = klines15m[klines15m.length - 1];
         
-        // Update indicators
+        // --- UPDATE BASE INDICATORS ---
         pairToUpdate.atr_15m = atrResult[atrResult.length - 1];
         pairToUpdate.adx_15m = adxResult.length ? adxResult[adxResult.length - 1].adx : undefined;
         pairToUpdate.atr_pct_15m = pairToUpdate.atr_15m ? (pairToUpdate.atr_15m / lastCandle.close) * 100 : undefined;
         pairToUpdate.rsi_15m = rsi15m;
-
+        
         const lastBB = bbResult[bbResult.length - 1];
         const currentBbWidthPct = (lastBB.upper - lastBB.lower) / lastBB.middle * 100;
         pairToUpdate.bollinger_bands_15m = { ...lastBB, width_pct: currentBbWidthPct };
-
-        // --- Bollinger Band Squeeze Logic (as per spec) ---
-        const bbWidths = bbResult.map(b => (b.upper - b.lower) / b.middle);
-        const previousCandleIndex = bbWidths.length - 2;
-        const previousBbWidth = bbWidths[previousCandleIndex];
-        
-        const historyForSqueeze = bbWidths.slice(0, previousCandleIndex + 1).slice(-this.SQUEEZE_LOOKBACK);
-        
-        let wasInBbSqueeze = false;
-        if (historyForSqueeze.length >= 20) {
-            const sortedWidths = [...historyForSqueeze].sort((a, b) => a - b);
-            const squeezeThreshold = sortedWidths[Math.floor(sortedWidths.length * this.SQUEEZE_PERCENTILE_THRESHOLD)];
-            wasInBbSqueeze = previousBbWidth <= squeezeThreshold;
-        }
-
-        const wasInSqueeze = wasInBbSqueeze;
-        pairToUpdate.is_in_squeeze_15m = wasInSqueeze;
         
         const volumes15m = klines15m.map(k => k.volume);
         const avgVolume = volumes15m.slice(-21, -1).reduce((sum, v) => sum + v, 0) / 20;
         pairToUpdate.volume_20_period_avg_15m = avgVolume;
 
-        const volumeConditionMet = lastCandle.volume > (avgVolume * 2);
-
-        // --- "Hotlist" Logic (as per spec) ---
+        // --- HYBRID STRATEGY DECISION LOGIC ---
         const isTrendOK = pairToUpdate.price_above_ema50_4h === true;
-        const isOnHotlist = isTrendOK && wasInSqueeze;
-        pairToUpdate.is_on_hotlist = isOnHotlist;
+        let finalScore = 'HOLD';
+        let strategyType = undefined;
+        let isOnHotlist = false;
 
+        // --- STRATEGY 1: MOMENTUM (IMPULSE) CHECK (🔥) ---
+        const bodySize = Math.abs(lastCandle.close - lastCandle.open);
+        const isImpulseBody = pairToUpdate.atr_15m > 0 && bodySize > pairToUpdate.atr_15m * 1.5;
+        const isImpulseVolume = avgVolume > 0 && lastCandle.volume > avgVolume * 2.0;
+        const isBullishCandle = lastCandle.close > lastCandle.open;
+        const isMomentumSignal = isTrendOK && isImpulseBody && isImpulseVolume && isBullishCandle;
+        
+        if (isMomentumSignal) {
+            strategyType = 'MOMENTUM';
+            finalScore = 'PENDING_CONFIRMATION';
+            isOnHotlist = true;
+            
+            // Immediately set up for 5m confirmation
+            let tradeSettings = { ...this.settings };
+            if (this.settings.USE_DYNAMIC_PROFILE_SELECTOR) {
+                if (pairToUpdate.adx_15m < tradeSettings.ADX_THRESHOLD_RANGE) {
+                    tradeSettings = { ...tradeSettings, ...settingProfiles['Le Scalpeur'] };
+                } else if (pairToUpdate.atr_pct_15m > tradeSettings.ATR_PCT_THRESHOLD_VOLATILE) {
+                    tradeSettings = { ...tradeSettings, ...settingProfiles['Le Chasseur de Volatilité'] };
+                } else {
+                    tradeSettings = { ...tradeSettings, ...settingProfiles['Le Sniper'] };
+                }
+            }
+            botState.pendingConfirmation.set(symbol, {
+                triggerPrice: lastCandle.close,
+                triggerTimestamp: Date.now(),
+                slPriceReference: lastCandle.low,
+                settings: tradeSettings,
+                strategy_type: 'MOMENTUM'
+            });
+            this.log('TRADE', `[MOMENTUM 🔥 15m] Signal for ${symbol}. Pending 5m confirmation.`);
+        } 
+        // --- STRATEGY 2: PRECISION (SQUEEZE) CHECK (🎯) ---
+        else {
+            const bbWidths = bbResult.map(b => (b.upper - b.lower) / b.middle);
+            const prevBbWidth = bbWidths[bbWidths.length - 2];
+            const historyForSqueeze = bbWidths.slice(0, -1).slice(-this.SQUEEZE_LOOKBACK);
+            
+            let wasInSqueeze = false;
+            if (historyForSqueeze.length >= 20) {
+                const sortedWidths = [...historyForSqueeze].sort((a, b) => a - b);
+                const squeezeThreshold = sortedWidths[Math.floor(sortedWidths.length * this.SQUEEZE_PERCENTILE_THRESHOLD)];
+                wasInSqueeze = prevBbWidth <= squeezeThreshold;
+            }
+            pairToUpdate.is_in_squeeze_15m = wasInSqueeze;
+            const isPrecisionSignal = isTrendOK && wasInSqueeze;
+
+            if (isPrecisionSignal) {
+                strategyType = 'PRECISION';
+                finalScore = 'COMPRESSION';
+                isOnHotlist = true;
+            }
+        }
+
+        // --- FINAL STATE UPDATE ---
+        pairToUpdate.strategy_type = strategyType;
+        pairToUpdate.is_on_hotlist = isOnHotlist;
+        
         if (isOnHotlist && !old_hotlist_status) {
-            this.log('SCANNER', `[HOTLIST ADDED] ${symbol} now meets macro conditions (Trend OK, Squeeze Confirmed). Watching on 1m/5m.`);
+            this.log('SCANNER', `[HOTLIST ADD] ${symbol} now meets criteria for strategy: ${strategyType}. Watching on micro TFs.`);
             addSymbolToMicroStreams(symbol);
         } else if (!isOnHotlist && old_hotlist_status) {
-            this.log('SCANNER', `[HOTLIST REMOVED] ${symbol} no longer meets macro conditions.`);
+            this.log('SCANNER', `[HOTLIST REMOVE] ${symbol} no longer meets criteria.`);
             removeSymbolFromMicroStreams(symbol);
         }
 
-        let finalScore = 'HOLD';
-        if (isOnHotlist) finalScore = 'COMPRESSION';
-
-        const isBreakout = lastCandle.close > lastBB.upper;
-        if (isBreakout && !wasInSqueeze) {
-            finalScore = 'FAKE_BREAKOUT';
-        }
-
-        const cooldownInfo = botState.recentlyLostSymbols.get(symbol);
-        if (cooldownInfo && Date.now() < cooldownInfo.until) {
+        // Handle cooldown override
+        if (botState.recentlyLostSymbols.has(symbol)) {
             finalScore = 'COOLDOWN';
         }
         
-        const previous15mCandle = klines15m[klines15m.length - 2];
-        const highOfPrevious15m = previous15mCandle.high;
-        const structureConditionMet = pairToUpdate.price > highOfPrevious15m;
+        // Handle pending confirmation state
+        if (botState.pendingConfirmation.has(symbol)) {
+            finalScore = 'PENDING_CONFIRMATION';
+        }
+
+        pairToUpdate.score = finalScore;
         
+        const isBreakout = lastCandle.close > lastBB.upper;
+        const structureConditionMet = pairToUpdate.price > (klines15m[klines15m.length - 2]?.high || 0);
+
         const conditions = {
             trend: isTrendOK,
-            squeeze: wasInSqueeze,
+            squeeze: pairToUpdate.is_in_squeeze_15m,
             safety: pairToUpdate.rsi_1h !== undefined && pairToUpdate.rsi_1h < this.settings.RSI_OVERBOUGHT_THRESHOLD,
             rsi_mtf: pairToUpdate.rsi_15m !== undefined && pairToUpdate.rsi_15m < this.settings.RSI_15M_OVERBOUGHT_THRESHOLD,
             breakout: isBreakout,
-            volume: volumeConditionMet,
+            volume: lastCandle.volume > avgVolume * 2,
             structure: structureConditionMet,
-            obv: false, // Default state
-            cvd_5m_trending_up: false, // Default state
+            obv: false,
+            cvd_5m_trending_up: false,
+            momentum_impulse: isMomentumSignal
         };
-        const conditionsMetCount = Object.values(conditions).filter(Boolean).length;
         pairToUpdate.conditions = conditions;
-        pairToUpdate.conditions_met_count = conditionsMetCount;
-        pairToUpdate.score_value = (conditionsMetCount / 8) * 100;
-        pairToUpdate.score = finalScore;
+        pairToUpdate.conditions_met_count = Object.values(conditions).filter(Boolean).length;
+        pairToUpdate.score_value = (pairToUpdate.conditions_met_count / 8) * 100;
 
         if (pairToUpdate.score !== old_score || pairToUpdate.is_on_hotlist !== old_hotlist_status) {
             broadcast({ type: 'SCANNER_UPDATE', payload: pairToUpdate });
@@ -583,7 +621,8 @@ class RealtimeAnalyzer {
     // Phase 2: 1m analysis to find the precision entry for pairs on the Hotlist
     async checkFor1mTrigger(symbol, tradeSettings) {
         const pair = botState.scannerCache.find(p => p.symbol === symbol);
-        if (!pair || !pair.is_on_hotlist || botState.pendingConfirmation.has(symbol)) return;
+        // This trigger is ONLY for the PRECISION strategy.
+        if (!pair || !pair.is_on_hotlist || pair.strategy_type !== 'PRECISION' || botState.pendingConfirmation.has(symbol)) return;
 
         const klines1m = this.klineData.get(symbol)?.get('1m');
         if (!klines1m || klines1m.length < 61) return;
@@ -646,7 +685,7 @@ class RealtimeAnalyzer {
         pair.conditions.obv = obvCondition;
 
         if (momentumCondition && volumeSpikeCondition && obvCondition) {
-            this.log('TRADE', `[1m TRIGGER] Signal for ${symbol}. Momentum, Volume, OBV all OK.`);
+            this.log('TRADE', `[PRECISION 🎯 1m] Trigger for ${symbol}. Momentum, Volume, OBV all OK.`);
             
             if (tradeSettings.USE_MTF_VALIDATION) {
                 pair.score = 'PENDING_CONFIRMATION';
@@ -655,8 +694,9 @@ class RealtimeAnalyzer {
                     triggerTimestamp: Date.now(),
                     slPriceReference: triggerCandle.low,
                     settings: tradeSettings,
+                    strategy_type: 'PRECISION', // Explicitly set strategy type
                 });
-                this.log('TRADE', `[MTF] ${symbol} is now pending 5m confirmation. Trigger price: $${triggerCandle.close}`);
+                this.log('TRADE', `[MTF] ${symbol} is now pending 5m confirmation for PRECISION strategy.`);
             } else {
                 const tradeOpened = await tradingEngine.evaluateAndOpenTrade(pair, triggerCandle.low, tradeSettings);
                 if (tradeOpened) {
@@ -675,38 +715,50 @@ class RealtimeAnalyzer {
         const pair = botState.scannerCache.find(p => p.symbol === symbol);
         if (!pair) return;
 
-        const { triggerPrice, slPriceReference, settings } = pendingSignal;
+        const { triggerPrice, slPriceReference, settings, strategy_type } = pendingSignal;
         
-        let obv5mCondition = true;
-        if (settings.USE_OBV_5M_VALIDATION) {
+        let isValid = false;
+        let reason = "";
+
+        if (strategy_type === 'MOMENTUM') {
+            const isBullishContinuation = new5mCandle.close > new5mCandle.open;
             const klines5m = this.klineData.get(symbol)?.get('5m');
-            if (klines5m && klines5m.length > 5) {
-                const obvValues = calculateOBV(klines5m);
-                if (obvValues.length > 5) {
-                    const lastObv = obvValues[obvValues.length - 1];
-                    const obvSma = SMA.calculate({ period: 5, values: obvValues.slice(0, -1) }).pop();
+            let hasSustainedVolume = false;
+            if (klines5m && klines5m.length > 10) {
+                const volumes5m = klines5m.map(k => k.volume);
+                const avgVolume5m = volumes5m.slice(-11, -1).reduce((s, v) => s + v, 0) / 10;
+                hasSustainedVolume = new5mCandle.volume > avgVolume5m;
+            }
+            isValid = isBullishContinuation && hasSustainedVolume;
+            reason = `5m candle did not confirm. Bullish: ${isBullishContinuation}, Volume: ${hasSustainedVolume}`;
+
+        } else { // Default to PRECISION logic
+            let obv5mCondition = true;
+            if (settings.USE_OBV_5M_VALIDATION) {
+                const klines5m = this.klineData.get(symbol)?.get('5m');
+                if (klines5m && klines5m.length > 5) {
+                    const obvValues = calculateOBV(klines5m);
+                    const lastObv = obvValues.pop();
+                    const obvSma = SMA.calculate({ period: 5, values: obvValues }).pop();
                     obv5mCondition = lastObv > obvSma;
                 } else {
                     obv5mCondition = false;
                 }
-            } else {
-                obv5mCondition = false;
             }
+            const candleIsValid = new5mCandle.close > triggerPrice && new5mCandle.close > new5mCandle.open;
+            isValid = candleIsValid && obv5mCondition;
+            reason = !candleIsValid ? "5m candle did not confirm" : "5m OBV did not confirm";
         }
-
-        const candleIsValid = new5mCandle.close > triggerPrice && new5mCandle.close > new5mCandle.open;
-        const isValid = candleIsValid && obv5mCondition;
         
         if (isValid) {
-            this.log('TRADE', `[MTF] SUCCESS: 5m candle for ${symbol} confirmed breakout. Proceeding to trade.`);
+            this.log('TRADE', `[MTF SUCCESS - ${strategy_type}] 5m candle for ${symbol} confirmed breakout. Proceeding.`);
             const tradeOpened = await tradingEngine.evaluateAndOpenTrade(pair, slPriceReference, settings);
             if (tradeOpened) {
                 pair.is_on_hotlist = false;
                 removeSymbolFromMicroStreams(symbol);
             }
         } else {
-            const reason = !candleIsValid ? "5m candle did not confirm" : "5m OBV did not confirm";
-            this.log('TRADE', `[MTF] FAILED: ${reason} for ${symbol}. Invalidating signal.`);
+            this.log('TRADE', `[MTF FAILED - ${strategy_type}] ${reason} for ${symbol}. Invalidating signal.`);
             pair.score = 'FAKE_BREAKOUT';
         }
         
@@ -759,7 +811,7 @@ class RealtimeAnalyzer {
         if (interval === '15m') {
             this.analyze15mIndicators(symbol);
         } else if (interval === '5m') {
-            // 1. Validate pending confirmations for trades
+            // 1. Validate pending confirmations for trades (both PRECISION and MOMENTUM)
             this.validate5mConfirmation(symbol, kline);
 
             // 2. Update CVD status for UI on all hotlist pairs
@@ -778,7 +830,7 @@ class RealtimeAnalyzer {
                 }
             }
         } else if (interval === '1m') {
-            // Get correct settings profile for this specific moment
+            // Get correct settings profile for this specific moment for PRECISION trades
             let tradeSettings = { ...botState.settings };
             if (botState.settings.USE_DYNAMIC_PROFILE_SELECTOR) {
                 const pair = botState.scannerCache.find(p => p.symbol === symbol);
@@ -793,7 +845,7 @@ class RealtimeAnalyzer {
                 }
             }
 
-            // Check 1: Look for new trade triggers
+            // Check 1: Look for new PRECISION trade triggers (Momentum is triggered on 15m)
             this.checkFor1mTrigger(symbol, tradeSettings);
 
             // Check 2: Look for scaling-in confirmations on existing trades
@@ -1275,9 +1327,10 @@ const tradingEngine = {
             current_entry_count: 1,
             total_entries: scalingInPercents.length,
             scaling_in_percents: scalingInPercents,
+            strategy_type: pair.strategy_type,
         };
 
-        log('TRADE', `>>> TRADE OPENED (ENTRY 1/${newTrade.total_entries}) <<< Opening ${botState.tradingMode} trade for ${pair.symbol}: Qty=${initial_quantity.toFixed(4)}, Entry=$${entryPrice}`);
+        log('TRADE', `>>> TRADE OPENED (STRATEGY: ${newTrade.strategy_type || 'N/A'}, ENTRY 1/${newTrade.total_entries}) <<< Opening ${botState.tradingMode} trade for ${pair.symbol}: Qty=${initial_quantity.toFixed(4)}, Entry=$${entryPrice}`);
         
         botState.activePositions.push(newTrade);
         if (botState.tradingMode === 'VIRTUAL') {
