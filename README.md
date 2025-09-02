@@ -8,11 +8,11 @@ BOTPY is a comprehensive web-based dashboard designed to monitor, control, and a
     -   `Virtual`: 100% simulation. Safe for testing and strategy optimization.
     -   `Real (Paper)`: Uses real Binance API keys for a live data feed but **simulates** trades without risking capital. The perfect final test.
     -   `Real (Live)`: Executes trades with real funds on your Binance account.
+-   **Hybrid Strategy Engine**: The bot is truly market-agnostic. It simultaneously scans for two distinct types of high-probability setups on every pair: "Precision" (Squeeze 🎯) for calm-before-the-storm scenarios, and "Momentum" (Impulse 🔥) for explosive breakouts.
 -   **Dynamic Adaptive Profiles**: Instead of a static configuration, the bot can operate as a "Tactical Chameleon". When enabled, it analyzes the market's volatility and trend strength for each specific trade and automatically selects the most effective management profile: "Sniper", "Scalper", or "Volatility Hunter".
--   **Precision "Macro-Micro" Strategy**: Implements a powerful multi-stage strategy that combines long-term trend analysis with precision 1-minute entry triggers to capture explosive breakouts.
 -   **Live Dashboard**: Offers an at-a-glance overview of key performance indicators (KPIs) such as balance, open positions, total Profit & Loss (P&L), and win rate.
--   **Real-time Market Scanner**: Displays the results of the market analysis, showing pairs that are potential trade candidates, including ADX and ATR% data used by the adaptive logic.
--   **Detailed Trade History**: Provides a complete log of all past trades with powerful sorting, filtering, and data export (CSV) capabilities.
+-   **Real-time Market Scanner**: Displays the results of the market analysis, showing pairs with active trade signals (🎯 or 🔥), including ADX and ATR% data used by the adaptive logic.
+-   **Detailed Trade History**: Provides a complete log of all past trades with powerful sorting, filtering, and data export (CSV) capabilities, now including strategy type for performance analysis.
 -   **Fully Configurable**: Every parameter of the strategy is easily adjustable through a dedicated settings page with helpful tooltips.
 
 ---
@@ -29,9 +29,10 @@ The application is designed with a dark, modern aesthetic (`bg-[#0c0e12]`), usin
 -   **Key Components**: Stat Cards (Balance, Open Positions, P&L), Performance Chart, and an Active Positions Table.
 
 ### 📡 Scanner
--   **Purpose**: To display the real-time results of the market analysis, showing which pairs are potential trade candidates.
+-   **Purpose**: To display the real-time results of the hybrid market analysis, showing which pairs are potential trade candidates.
 -   **Layout**: A data-dense table with sortable columns reflecting the strategy.
 -   **Key Columns**:
+    -   `Signal`: Displays the type of setup detected: 🎯 for "Precision" or 🔥 for "Momentum".
     -   `Symbol`, `Price` (with live green/red flashes).
     -   `Score`: The final strategic score, displayed as a colored badge.
     -   `Conditions`: Visual dots representing the status of each strategic filter.
@@ -40,7 +41,7 @@ The application is designed with a dark, modern aesthetic (`bg-[#0c0e12]`), usin
     -   `ADX 15m` & `ATR % 15m`: The key indicators for the Dynamic Profile Selector.
 
 ### 📜 History
--   **Purpose**: A dedicated page for reviewing and analyzing the performance of all completed trades.
+-   **Purpose**: A dedicated page for reviewing and analyzing the performance of all completed trades. Includes a "Stratégie" column to compare the profitability of 🎯 vs. 🔥 setups.
 
 ### ⚙️ Settings
 -   **Purpose**: Allows for complete configuration of the bot's strategy, including enabling the "Dynamic Profile Selector" and setting its thresholds.
@@ -52,15 +53,17 @@ The application is designed with a dark, modern aesthetic (`bg-[#0c0e12]`), usin
 
 # Version Française
 
-## 🧠 Stratégie de Trading : “Le Chasseur de Précision Macro-Micro”
+## 🧠 Moteur de Stratégie Hybride : Le Chasseur d'Opportunités
 
-La philosophie du bot est de combiner une analyse **"Macro"** à haute échelle de temps pour trouver des environnements à forte probabilité, avec une analyse **"Micro"** à basse échelle de temps pour identifier le point d'entrée parfait. Cela permet d'éviter le "bruit" des petites unités de temps tout en capturant le début explosif d'un mouvement avec une précision chirurgicale, le tout protégé par des couches de sécurité robustes au niveau du capital.
+La philosophie du bot est d'être agnostique aux conditions de marché. Il ne se limite plus à un seul type de configuration. Au lieu de cela, il scanne en permanence et simultanément le marché à la recherche de deux types d'opportunités à haute probabilité : les phases de **Précision** (calme avant la tempête) et les phases de **Momentum** (accélération explosive).
 
 ---
 
-### **Phase 1 : Le Radar Macro (Qualification pour la Hotlist)**
+### **Volet 1 : Stratégie de Précision (Squeeze) 🎯**
 
-L'objectif est d'identifier des paires dans un environnement propice à une explosion haussière. Une paire qui remplit ces conditions est ajoutée à une **"Hotlist"** (marquée par un `🎯` dans l'UI).
+Cette stratégie vise à capturer le début d'un mouvement explosif en identifiant des périodes de compression de volatilité extrêmes sur le point de se résoudre. C'est la quintessence de l'approche "Macro-Micro".
+
+#### **Phase 1.1 : Le Radar Macro (Qualification du Signal de Précision)**
 
 *   **Contexte d'Analyse** : Graphique 15 minutes (15m) et 4 heures (4h).
 *   **Condition 1 : Filtre de Tendance Maître (Contexte 4h)**
@@ -69,13 +72,11 @@ L'objectif est d'identifier des paires dans un environnement propice à une expl
 *   **Condition 2 : Compression de Volatilité (Préparation 15m)**
     *   **Outil** : Bandes de Bollinger (BB).
     *   **Règle** : La paire doit être dans un **"Bollinger Band Squeeze"**. Ceci est défini lorsque la largeur des bandes sur la bougie de 15m *précédente* est dans le quartile inférieur (25%) de ses valeurs sur les 50 dernières périodes.
-*   **Action** : Si la `Condition 1` ET la `Condition 2` sont vraies, ajouter le symbole à la **Hotlist**. S'abonner dynamiquement à ses flux de données 1 minute et 5 minutes.
+*   **Action** : Si la `Condition 1` ET la `Condition 2` sont vraies, un **signal de Précision 🎯** est identifié. Le bot s'abonne dynamiquement aux flux 1m et 5m pour chercher la validation.
 
----
+#### **Phase 1.2 : Le Déclencheur Micro & Confirmation Multi-couches (Validation du Signal de Précision)**
 
-### **Phase 2 : Le Déclencheur Micro & Confirmation Multi-couches (Anti-Fakeout)**
-
-Pour les paires sur la Hotlist, le bot analyse chaque bougie d'une minute pour trouver le point d'entrée. Pour être validé, un signal doit passer une série de filtres de confirmation stricts.
+Pour les paires avec un signal 🎯, le bot analyse chaque bougie d'une minute pour trouver le point d'entrée parfait, protégé par une série de filtres anti-piège.
 
 *   **Contexte d'Analyse** : Graphique 1 minute (1m) et 5 minutes (5m).
 *   **Condition 1 : Basculement du Momentum (L'Étincelle - 1m)**
@@ -84,34 +85,52 @@ Pour les paires sur la Hotlist, le bot analyse chaque bougie d'une minute pour t
 *   **Condition 2 : Confirmation par le Volume (Le Carburant - 1m & 5m)**
     *   **Outils** : Volume de trading, On-Balance Volume (OBV), Cumulative Volume Delta (CVD).
     *   **Règle 2a (Volume 1m)** : Le volume de la bougie de déclenchement doit être **supérieur à 1.5 fois** la moyenne du volume récent.
-    *   **Règle 2b (OBV 1m)** : L'indicateur **OBV** sur 1 minute doit avoir une pente ascendante, confirmant que la pression acheteuse est réelle et soutenue.
-    *   **Règle 2c (CVD 5m)** : L'indicateur **CVD** sur 5 minutes doit avoir une pente ascendante, confirmant que la pression d'achat *nette* (acheteurs - vendeurs) est positive.
+    *   **Règle 2b (OBV 1m)** : L'indicateur **OBV** sur 1 minute doit avoir une pente ascendante.
+    *   **Règle 2c (CVD 5m)** : L'indicateur **CVD** sur 5 minutes doit avoir une pente ascendante.
 *   **Condition 3 : Validation Multi-Temporelle (La Confirmation - 5m)**
-    *   **Règle** : Après le signal 1m, le bot met le trade en **attente**. Il attend la clôture de la bougie de 5 minutes en cours. Le trade n'est exécuté que si cette bougie de 5 minutes clôture également de manière haussière et au-dessus du prix de déclenchement initial. **Ceci est le filtre anti "fake breakout" le plus puissant.**
+    *   **Règle** : Après le signal 1m, le bot met le trade en **attente**. Il attend la clôture de la bougie de 5 minutes en cours. Le trade n'est exécuté que si cette bougie de 5 minutes clôture également de manière haussière.
 *   **Condition 4 : Filtres de Sécurité Avancés (Anti-Piège)**
-    *   **Règle 4a (RSI 1h & 15m)** : Le RSI sur 1 heure ET sur 15 minutes ne doivent pas être en zone de surachat.
-    *   **Règle 4b (Mèches)** : La bougie de déclenchement 1m ne doit pas avoir une mèche supérieure anormalement grande (signe de rejet).
-    *   **Règle 4c (Parabolique)** : Le prix ne doit pas avoir connu une hausse verticale insoutenable juste avant le signal.
-*   **Condition 5 : Confirmation OBV Multi-Échelles (Force Durable - 5m)**
-    *   **Règle** : Après la validation de la bougie de 5m (Condition 3), le bot vérifie que l'OBV sur 5 minutes est également en tendance haussière.
-*   **Action** : Si toutes les conditions sont remplies, un **signal d'entrée de haute qualité** est généré. Le bot passe à la Phase 2.5.
+    *   **Règles** : Le RSI (1h & 15m) ne doit pas être en surchauffe, la bougie de déclenchement ne doit pas avoir de grande mèche supérieure, et le prix ne doit pas être dans une phase parabolique.
+*   **Action** : Si toutes ces conditions sont remplies, un **trade de type Précision 🎯** est validé.
 
 ---
 
-### **Phase 2.5 : Analyse Tactique & Sélection du Profil (Le Cerveau Adaptatif)**
+### **Volet 2 : Stratégie de Momentum (Impulsion) 🔥**
 
-Juste avant d'ouvrir la position, si le mode dynamique est activé, le bot effectue une analyse de la "personnalité" du marché pour choisir la **stratégie de gestion de sortie** la plus appropriée.
+Cette stratégie est conçue pour capitaliser sur des mouvements déjà en cours qui montrent des signes d'accélération soudaine. Elle est moins axée sur la préparation et plus sur la réaction rapide à la force du marché.
+
+#### **Phase 2.1 : Détection de l'Impulsion (Qualification du Signal de Momentum)**
+
+*   **Contexte d'Analyse** : Graphique 15 minutes (15m) et 4 heures (4h).
+*   **Condition 1 : Filtre de Tendance Maître (Contexte 4h)**
+    *   **Outil** : Moyenne Mobile Exponentielle 50 périodes (MME50).
+    *   **Règle** : Le prix doit être au-dessus de la MME50_4h.
+*   **Condition 2 : Bougie d'Impulsion (L'Explosion - 15m)**
+    *   **Règle** : Une bougie de 15 minutes doit clôturer avec une force significative, définie par un corps de bougie large et un volume bien supérieur à la moyenne.
+*   **Action** : Si la `Condition 1` ET la `Condition 2` sont vraies, un **signal de Momentum 🔥** est identifié.
+
+#### **Phase 2.2 : Confirmation et Entrée (Validation du Signal de Momentum)**
+
+*   **Contexte d'Analyse** : Graphique 5 minutes (5m).
+*   **Règle** : Le bot recherche une confirmation de continuation sur le graphique 5m. Il attend une bougie haussière qui valide la poursuite du mouvement impulsif, avec un volume soutenu.
+*   **Action** : Si la continuation est confirmée, un **trade de type Momentum 🔥** est validé.
+
+---
+
+### **Phase 3 : Analyse Tactique & Sélection du Profil (Le Cerveau Adaptatif Commun)**
+
+**Cette phase est déclenchée après la validation d'un signal, qu'il soit de type 🎯 ou 🔥.** Juste avant d'ouvrir la position, si le mode dynamique est activé, le bot effectue une analyse de la "personnalité" du marché pour choisir la **stratégie de gestion de sortie** la plus appropriée.
 
 *   **Contexte d'Analyse** : Indicateurs 15 minutes (ADX, ATR %).
 *   **Matrice de Décision** :
     1.  **Le marché est-il en "Range" ?** (`ADX < Seuil_Range`) -> Sélectionner le profil **"Le Scalpeur"**.
     2.  **Sinon, le marché est-il "Hyper-Volatil" ?** (`ATR % > Seuil_Volatil`) -> Sélectionner le profil **"Le Chasseur de Volatilité"**.
     3.  **Sinon (cas par défaut)** -> Sélectionner le profil **"Le Sniper"**.
-*   **Action Finale** : Exécuter l'ordre d'achat avec les paramètres du profil sélectionné.
+*   **Action Finale** : Exécuter l'ordre d'achat avec les paramètres du profil sélectionné et enregistrer le type de stratégie (🎯 ou 🔥) qui a déclenché l'entrée.
 
 ---
 
-### **Phase 3 : Gestion de Trade & Entrée Intelligente**
+### **Phase 4 : Gestion de Trade & Entrée Intelligente**
 
 *   **Entrées Fractionnées (Scaling In)** : Pour minimiser le risque sur les faux signaux, le bot n'entre pas avec 100% de sa position. Il initie le trade avec une fraction (ex: 40%) et n'ajoute les autres parties (ex: 30%, puis 30%) que si les bougies suivantes confirment la continuation du mouvement.
 
@@ -122,7 +141,7 @@ Juste avant d'ouvrir la position, si le mode dynamique est activé, le bot effec
 
 ---
 
-### **Phase 4 : Sécurité du Portefeuille & Survie à Long Terme (Le Capital est Sacré)**
+### **Phase 5 : Sécurité du Portefeuille & Survie à Long Terme (Le Capital est Sacré)**
 
 Ces règles de sécurité ont la priorité sur toutes les stratégies d'entrée.
 
