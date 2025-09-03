@@ -33,7 +33,7 @@ LOSS_COOLDOWN_HOURS=4
 
 # --- ADVANCED ENTRY CONFIRMATION ---
 # Attendre la confirmation sur une unité de temps supérieure (5m) avant d'entrer. (true/false)
-USE_MTF_VALIDATION=true
+USE_MTF_VALIDATION=false
 # Utiliser la confirmation de volume par On-Balance Volume (OBV). (true/false)
 USE_OBV_VALIDATION=true
 # Activer le filtre de confirmation par Cumulative Volume Delta (CVD) sur 5m. (true/false)
@@ -49,7 +49,7 @@ USE_WICK_DETECTION_FILTER=true
 # Pourcentage maximum de la mèche supérieure par rapport à la taille totale de la bougie.
 MAX_UPPER_WICK_PCT=50
 # Valider la tendance de l'OBV également sur la bougie de confirmation de 5 minutes. (true/false)
-USE_OBV_5M_VALIDATION=true
+USE_OBV_5M_VALIDATION=false
 
 # --- ADVANCED STRATEGY & RISK MANAGEMENT ---
 # Utiliser un Stop Loss dynamique basé sur l'ATR. (true/false)

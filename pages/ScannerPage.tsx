@@ -209,6 +209,8 @@ const ScannerPage: React.FC = () => {
         ? settings.RSI_OVERBOUGHT_THRESHOLD 
         : settings.RSI_15M_OVERBOUGHT_THRESHOLD;
 
+    if (threshold === undefined) return 'text-gray-500';
+
     if (rsi >= threshold) return 'text-red-400 font-bold';
     if (rsi >= threshold - 10) return 'text-yellow-400';
     return 'text-green-400';
@@ -222,14 +224,14 @@ const ScannerPage: React.FC = () => {
   };
 
   const getAdxColorClass = (adx?: number): string => {
-    if (adx === undefined || !settings) return 'text-gray-500';
+    if (adx === undefined || !settings?.ADX_THRESHOLD_RANGE) return 'text-gray-500';
     if (adx < settings.ADX_THRESHOLD_RANGE) return 'text-sky-400';
     if (adx > 40) return 'text-green-400 font-bold';
     return 'text-gray-300';
   };
 
   const getAtrPctColorClass = (atrPct?: number): string => {
-      if (atrPct === undefined || !settings) return 'text-gray-500';
+      if (atrPct === undefined || !settings?.ATR_PCT_THRESHOLD_VOLATILE) return 'text-gray-500';
       if (atrPct > settings.ATR_PCT_THRESHOLD_VOLATILE) return 'text-red-400 font-bold';
       return 'text-gray-300';
   };

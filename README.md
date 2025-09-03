@@ -78,17 +78,17 @@ Cette stratégie vise à capturer le début d'un mouvement explosif en identifia
 
 Pour les paires avec un signal 🎯, le bot analyse chaque bougie d'une minute pour trouver le point d'entrée parfait, protégé par une série de filtres anti-piège.
 
-*   **Contexte d'Analyse** : Graphique 1 minute (1m) et 5 minutes (5m).
+*   **Contexte d'Analyse** : Graphique 1 minute (1m).
 *   **Condition 1 : Basculement du Momentum (L'Étincelle - 1m)**
     *   **Outil** : Moyenne Mobile Exponentielle 9 périodes (MME9).
     *   **Règle** : Une bougie de 1 minute doit **clôturer AU-DESSUS** de la MME9.
-*   **Condition 2 : Confirmation par le Volume (Le Carburant - 1m & 5m)**
-    *   **Outils** : Volume de trading, On-Balance Volume (OBV), Cumulative Volume Delta (CVD).
+*   **Condition 2 : Confirmation par le Volume (Le Carburant - 1m)**
+    *   **Outils** : Volume de trading, On-Balance Volume (OBV).
     *   **Règle 2a (Volume 1m)** : Le volume de la bougie de déclenchement doit être **supérieur à 1.5 fois** la moyenne du volume récent.
     *   **Règle 2b (OBV 1m)** : L'indicateur **OBV** sur 1 minute doit avoir une pente ascendante.
-    *   **Règle 2c (CVD 5m)** : L'indicateur **CVD** sur 5 minutes doit avoir une pente ascendante.
-*   **Condition 3 : Validation Multi-Temporelle (La Confirmation - 5m)**
-    *   **Règle** : Après le signal 1m, le bot met le trade en **attente**. Il attend la clôture de la bougie de 5 minutes en cours. Le trade n'est exécuté que si cette bougie de 5 minutes clôture également de manière haussière.
+*   **Condition 3 : Confirmation Instantanée & Validation Optionnelle**
+    *   **Règle (par défaut)** : Le bot entre en position **immédiatement après la clôture de la bougie de 1 minute** qui remplit les conditions de momentum et de volume. Cette approche maximise la réactivité pour ne pas manquer le début du mouvement.
+    *   **Validation Optionnelle (pour plus de sécurité)** : Pour les traders plus prudents, le paramètre `USE_MTF_VALIDATION` peut être activé. Si c'est le cas, le bot mettra le trade en **attente** et attendra la clôture d'une bougie haussière de 5 minutes pour confirmer la cassure avant d'entrer, réduisant ainsi le risque de faux signaux.
 *   **Condition 4 : Filtres de Sécurité Avancés (Anti-Piège)**
     *   **Règles** : Le RSI (1h & 15m) ne doit pas être en surchauffe, la bougie de déclenchement ne doit pas avoir de grande mèche supérieure, et le prix ne doit pas être dans une phase parabolique.
 *   **Action** : Si toutes ces conditions sont remplies, un **trade de type Précision 🎯** est validé.

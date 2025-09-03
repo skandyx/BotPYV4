@@ -329,7 +329,7 @@ const loadData = async () => {
             CONSECUTIVE_LOSS_LIMIT: parseInt(process.env.CONSECUTIVE_LOSS_LIMIT, 10) || 5,
 
             // --- ADVANCED ENTRY CONFIRMATION ---
-            USE_MTF_VALIDATION: isNotFalse('USE_MTF_VALIDATION'),
+            USE_MTF_VALIDATION: isTrue('USE_MTF_VALIDATION'),
             USE_OBV_VALIDATION: isNotFalse('USE_OBV_VALIDATION'),
             USE_CVD_FILTER: isTrue('USE_CVD_FILTER'),
             
