@@ -391,7 +391,9 @@ const ScannerPage: React.FC = () => {
                                     <td className={`px-2 sm:px-4 lg:px-6 py-4 whitespace-nowrap text-sm ${getRsiColorClass(pair.rsi_15m, '15m')}`}>
                                         {pair.rsi_15m?.toFixed(1) || 'N/A'}
                                     </td>
-                                    <td className="px-2 sm:px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-400">${(pair.volume / 1_000_000).toFixed(2)}M</td>
+                                    <td className="px-2 sm:px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                                        {typeof pair.volume === 'number' ? `$${(pair.volume / 1_000_000).toFixed(2)}M` : 'N/A'}
+                                    </td>
                                      <td className={`px-2 sm:px-4 lg:px-6 py-4 whitespace-nowrap text-sm ${getAdxColorClass(pair.adx_15m)}`} title="Force de la Tendance ( < 20 = Range, > 40 = Fort)">
                                         {pair.adx_15m?.toFixed(1) || 'N/A'}
                                     </td>
