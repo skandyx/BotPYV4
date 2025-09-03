@@ -2,6 +2,8 @@
 
 
 
+
+
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
@@ -1248,7 +1250,7 @@ const tradingEngine = {
             return false;
         }
 
-        const entryPrice = pair.price;
+        let entryPrice = pair.price;
         let positionSizePct = tradeSettings.POSITION_SIZE_PCT;
         if (tradeSettings.USE_DYNAMIC_POSITION_SIZING && pair.score === 'STRONG BUY') {
             positionSizePct = tradeSettings.STRONG_BUY_POSITION_SIZE_PCT;
@@ -1268,6 +1270,37 @@ const tradingEngine = {
         
         const initial_quantity = useScalingIn ? (target_quantity * (scalingInPercents[0] / 100)) : target_quantity;
         
+        // --- REAL TRADE EXECUTION ---
+        if (botState.tradingMode === 'REAL_LIVE') {
+            if (!binanceApiClient) {
+                log('ERROR', `[REAL_LIVE] Cannot open trade for ${pair.symbol}. Binance API client not initialized.`);
+                return false;
+            }
+            try {
+                const formattedQty = formatQuantity(pair.symbol, initial_quantity);
+                log('TRADE', `>>> [REAL_LIVE] FIRING TRADE <<< Attempting to BUY ${formattedQty} ${pair.symbol} at MARKET price.`);
+                const orderResult = await binanceApiClient.createOrder(pair.symbol, 'BUY', 'MARKET', formattedQty);
+                log('BINANCE_API', `[REAL_LIVE] Order successful for ${pair.symbol}. Order ID: ${orderResult.orderId}`);
+                
+                // === BUG FIX: Use actual fill price instead of cached price ===
+                const executedQty = parseFloat(orderResult.executedQty);
+                if (executedQty > 0) {
+                    const cummulativeQuoteQty = parseFloat(orderResult.cummulativeQuoteQty);
+                    entryPrice = cummulativeQuoteQty / executedQty;
+                    log('TRADE', `[REAL_LIVE] Actual average entry price for ${pair.symbol} is $${entryPrice.toFixed(4)}.`);
+                } else {
+                    log('ERROR', `[REAL_LIVE] Order for ${pair.symbol} was successful but executed quantity is zero. Aborting trade.`);
+                    return false;
+                }
+
+            } catch (error) {
+                log('ERROR', `[REAL_LIVE] FAILED to place order for ${pair.symbol}. Error: ${error.message}. Aborting trade.`);
+                return false;
+            }
+        }
+        
+        const initial_cost = initial_quantity * entryPrice;
+
         let stopLoss;
         if (tradeSettings.USE_ATR_STOP_LOSS && pair.atr_15m) {
             stopLoss = entryPrice - (pair.atr_15m * tradeSettings.ATR_MULTIPLIER);
@@ -1282,26 +1315,7 @@ const tradingEngine = {
         }
         
         const takeProfit = entryPrice + (riskPerUnit * tradeSettings.RISK_REWARD_RATIO);
-
-        // --- REAL TRADE EXECUTION ---
-        if (botState.tradingMode === 'REAL_LIVE') {
-            if (!binanceApiClient) {
-                log('ERROR', `[REAL_LIVE] Cannot open trade for ${pair.symbol}. Binance API client not initialized.`);
-                return false;
-            }
-            try {
-                const formattedQty = formatQuantity(pair.symbol, initial_quantity);
-                log('TRADE', `>>> [REAL_LIVE] FIRING TRADE <<< Attempting to BUY ${formattedQty} ${pair.symbol} at MARKET price.`);
-                const orderResult = await binanceApiClient.createOrder(pair.symbol, 'BUY', 'MARKET', formattedQty);
-                log('BINANCE_API', `[REAL_LIVE] Order successful for ${pair.symbol}. Order ID: ${orderResult.orderId}`);
-            } catch (error) {
-                log('ERROR', `[REAL_LIVE] FAILED to place order for ${pair.symbol}. Error: ${error.message}. Aborting trade.`);
-                return false;
-            }
-        }
         
-        const initial_cost = initial_quantity * entryPrice;
-
         const newTrade = {
             id: botState.tradeIdCounter++,
             mode: botState.tradingMode,
@@ -1526,8 +1540,17 @@ const tradingEngine = {
                 log('TRADE', `>>> [REAL_LIVE] CLOSING TRADE <<< Attempting to SELL ${formattedQty} ${trade.symbol} at MARKET price.`);
                 const orderResult = await binanceApiClient.createOrder(trade.symbol, 'SELL', 'MARKET', formattedQty);
                 log('BINANCE_API', `[REAL_LIVE] Close order successful for ${trade.symbol}. Order ID: ${orderResult.orderId}`);
-                // Use the actual filled price from Binance if available, otherwise use the triggered price
-                exitPrice = parseFloat(orderResult.fills[0].price);
+                
+                // === BUG FIX: Use actual average fill price instead of first fill ===
+                const executedQty = parseFloat(orderResult.executedQty);
+                if (executedQty > 0) {
+                    const cummulativeQuoteQty = parseFloat(orderResult.cummulativeQuoteQty);
+                    exitPrice = cummulativeQuoteQty / executedQty;
+                    log('TRADE', `[REAL_LIVE] Actual average exit price for ${trade.symbol} is $${exitPrice.toFixed(4)}.`);
+                } else {
+                    log('ERROR', `[REAL_LIVE] Close order for ${trade.symbol} was successful but executed quantity is zero. Manual check required.`);
+                }
+
             } catch (error) {
                  log('ERROR', `[REAL_LIVE] FAILED to place closing order for ${trade.symbol}. Error: ${error.message}. THE POSITION REMAINS OPEN ON BINANCE AND IN THE BOT. MANUAL INTERVENTION REQUIRED.`);
                 // CRITICAL: Do not proceed with internal closing logic if the real order fails.

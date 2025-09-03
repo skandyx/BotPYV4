@@ -14,26 +14,28 @@ interface TradingViewWidgetProps {
 
 const TradingViewWidget: React.FC<TradingViewWidgetProps> = ({ symbol, defaultInterval = "15" }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  // Using a stable ID for the container is more robust.
-  // The widget's internal content will be replaced based on the symbol prop.
+  const widgetRef = useRef<any>(null); // Ref to store the widget instance
   const containerId = 'tradingview_widget_container';
 
   useEffect(() => {
-    const widgetContainer = containerRef.current;
-    if (!widgetContainer) {
-      return;
-    }
-
-    const createAndRenderWidget = () => {
-      if (!window.TradingView || !window.TradingView.widget) {
-          console.error("TradingView script not loaded or container not ready.");
-          return;
+    const createWidget = () => {
+      if (!containerRef.current || !window.TradingView || !window.TradingView.widget) {
+        console.error("TradingView script not loaded or container not ready.");
+        return;
       }
-      // Ensure the container is empty before rendering a new widget.
-      // This is a robust way to clean up, avoiding potential issues with the library's remove() method.
-      widgetContainer.innerHTML = '';
+      
+      // Clean up previous widget instance if it exists
+      if (widgetRef.current) {
+        try {
+          widgetRef.current.remove();
+        } catch (error) {
+          console.warn("Could not remove previous TradingView widget:", error);
+        }
+        widgetRef.current = null;
+      }
+      containerRef.current.innerHTML = ''; // Ensure container is empty as a fallback
 
-      new window.TradingView.widget({
+      const widget = new window.TradingView.widget({
         autosize: true,
         symbol: `BINANCE:${symbol}`,
         interval: defaultInterval,
@@ -50,24 +52,31 @@ const TradingViewWidget: React.FC<TradingViewWidgetProps> = ({ symbol, defaultIn
         hotlist: true,
         calendar: true,
       });
+      widgetRef.current = widget;
     };
 
-    // Check if the TradingView script is already loaded.
     if (window.TradingView && window.TradingView.widget) {
-      createAndRenderWidget();
+      createWidget();
     } else {
-      // If not loaded, add a listener to the script tag.
       const script = document.querySelector('script[src="https://s3.tradingview.com/tv.js"]');
-      script?.addEventListener('load', createAndRenderWidget, { once: true });
+      if (script) {
+        script.addEventListener('load', createWidget, { once: true });
+      } else {
+        console.error("TradingView script tag not found in the document.");
+      }
     }
 
-    // When the component unmounts, we must clean up the container.
     return () => {
-      if (widgetContainer) {
-        widgetContainer.innerHTML = '';
+      if (widgetRef.current) {
+        try {
+          widgetRef.current.remove();
+        } catch(error) {
+            console.warn("Could not remove TradingView widget on cleanup:", error);
+        }
+        widgetRef.current = null;
       }
     };
-  }, [symbol, defaultInterval, containerId]); // Re-run effect if the symbol or interval changes.
+  }, [symbol, defaultInterval]);
 
   return (
     <div 
