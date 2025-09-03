@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ScannedPair, StrategyConditions } from '../types';
+import { ScannedPair, StrategyConditions, BotSettings } from '../types';
 import Spinner from '../components/common/Spinner';
 import { scannerStore } from '../services/scannerStore';
 import { useAppContext } from '../contexts/AppContext';
@@ -108,6 +108,19 @@ const ScannerPage: React.FC = () => {
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const { settings } = useAppContext();
+
+  // Robust check to ensure all required settings for rendering are fully loaded.
+  // This prevents crashes from race conditions on page refresh.
+  const settingsReady = useMemo(() => {
+    if (!settings) return false;
+    return (
+      typeof settings.RSI_OVERBOUGHT_THRESHOLD === 'number' &&
+      typeof settings.RSI_15M_OVERBOUGHT_THRESHOLD === 'number' &&
+      typeof settings.ADX_THRESHOLD_RANGE === 'number' &&
+      typeof settings.ATR_PCT_THRESHOLD_VOLATILE === 'number'
+    );
+  }, [settings]);
+
 
   useEffect(() => {
     const handleStoreUpdate = (updatedPairs: ScannedPair[]) => {
@@ -237,7 +250,7 @@ const ScannerPage: React.FC = () => {
   };
 
 
-  if (!settings) {
+  if (!settingsReady) {
     return <div className="flex justify-center items-center h-64"><Spinner /></div>;
   }
   
