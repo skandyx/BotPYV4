@@ -202,8 +202,13 @@ const ScannerPage: React.FC = () => {
     return 'text-red-400';
   };
 
-  const getRsiColorClass = (rsi: number | undefined, threshold?: number): string => {
-    if (rsi === undefined || threshold === undefined) return 'text-gray-500';
+  const getRsiColorClass = (rsi: number | undefined, which: '1h' | '15m'): string => {
+    if (rsi === undefined || !settings) return 'text-gray-500';
+
+    const threshold = which === '1h' 
+        ? settings.RSI_OVERBOUGHT_THRESHOLD 
+        : settings.RSI_15M_OVERBOUGHT_THRESHOLD;
+
     if (rsi >= threshold) return 'text-red-400 font-bold';
     if (rsi >= threshold - 10) return 'text-yellow-400';
     return 'text-green-400';
@@ -365,10 +370,10 @@ const ScannerPage: React.FC = () => {
                                     <td className="px-2 sm:px-4 lg:px-6 py-4 whitespace-nowrap">
                                         <ConditionDots conditions={pair.conditions} />
                                     </td>
-                                    <td className={`px-2 sm:px-4 lg:px-6 py-4 whitespace-nowrap text-sm ${getRsiColorClass(pair.rsi_1h, settings.RSI_OVERBOUGHT_THRESHOLD)}`}>
+                                    <td className={`px-2 sm:px-4 lg:px-6 py-4 whitespace-nowrap text-sm ${getRsiColorClass(pair.rsi_1h, '1h')}`}>
                                         {pair.rsi_1h?.toFixed(1) || 'N/A'}
                                     </td>
-                                    <td className={`px-2 sm:px-4 lg:px-6 py-4 whitespace-nowrap text-sm ${getRsiColorClass(pair.rsi_15m, settings.RSI_15M_OVERBOUGHT_THRESHOLD)}`}>
+                                    <td className={`px-2 sm:px-4 lg:px-6 py-4 whitespace-nowrap text-sm ${getRsiColorClass(pair.rsi_15m, '15m')}`}>
                                         {pair.rsi_15m?.toFixed(1) || 'N/A'}
                                     </td>
                                     <td className="px-2 sm:px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-400">${(pair.volume / 1_000_000).toFixed(2)}M</td>
