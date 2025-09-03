@@ -202,8 +202,8 @@ const ScannerPage: React.FC = () => {
     return 'text-red-400';
   };
 
-  const getRsiColorClass = (rsi: number | undefined, threshold: number): string => {
-    if (rsi === undefined) return 'text-gray-500';
+  const getRsiColorClass = (rsi: number | undefined, threshold?: number): string => {
+    if (rsi === undefined || threshold === undefined) return 'text-gray-500';
     if (rsi >= threshold) return 'text-red-400 font-bold';
     if (rsi >= threshold - 10) return 'text-yellow-400';
     return 'text-green-400';
