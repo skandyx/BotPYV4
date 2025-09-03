@@ -254,7 +254,7 @@ const ScannerPage: React.FC = () => {
     return <div className="flex justify-center items-center h-64"><Spinner /></div>;
   }
   
-  const totalColumnCount = 15;
+  const totalColumnCount = 14;
 
   return (
     <div className="space-y-6">
@@ -302,7 +302,7 @@ const ScannerPage: React.FC = () => {
                         <SortableHeader sortConfig={sortConfig} requestSort={requestSort} sortKey="symbol">Symbole</SortableHeader>
                         <SortableHeader sortConfig={sortConfig} requestSort={requestSort} sortKey="price">Prix</SortableHeader>
                         <th scope="col" className="px-2 sm:px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Tendance 4h</th>
-                        <SortableHeader sortConfig={sortConfig} requestSort={requestSort} sortKey="score">Score Global</SortableHeader>
+                        <SortableHeader sortConfig={sortConfig} requestSort={requestSort} sortKey="score_value">Score Global</SortableHeader>
                         <SortableHeader sortConfig={sortConfig} requestSort={requestSort} sortKey="trend_score">Score Tendance</SortableHeader>
                         <th scope="col" className="px-2 sm:px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                             <div className="flex items-center">
