@@ -4,6 +4,8 @@
 
 
 
+
+
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
@@ -1266,9 +1268,30 @@ const tradingEngine = {
         const target_quantity = positionSizeUSD / entryPrice;
 
         const scalingInPercents = (tradeSettings.SCALING_IN_CONFIG || "").split(',').map(p => parseFloat(p.trim())).filter(p => !isNaN(p) && p > 0);
-        const useScalingIn = scalingInPercents.length > 0;
+        let useScalingIn = scalingInPercents.length > 0;
         
-        const initial_quantity = useScalingIn ? (target_quantity * (scalingInPercents[0] / 100)) : target_quantity;
+        let initial_quantity = useScalingIn ? (target_quantity * (scalingInPercents[0] / 100)) : target_quantity;
+        let initial_cost = initial_quantity * entryPrice;
+
+        const rules = symbolRules.get(pair.symbol);
+        const minNotionalValue = rules ? rules.minNotional : 5.0; // Use a safe default of 5 USDT
+
+        // --- MIN_NOTIONAL CHECK & ADJUSTMENT ---
+        if (botState.tradingMode === 'REAL_LIVE' && initial_cost < minNotionalValue) {
+            log('WARN', `[MIN_NOTIONAL] Initial order size for ${pair.symbol} ($${initial_cost.toFixed(2)}) is below minimum ($${minNotionalValue}). Adjusting...`);
+            
+            const fullPositionCost = target_quantity * entryPrice;
+
+            if (fullPositionCost < minNotionalValue) {
+                log('ERROR', `[MIN_NOTIONAL] Aborting trade for ${pair.symbol}. Even full position size ($${fullPositionCost.toFixed(2)}) is below minimum notional value ($${minNotionalValue}). Consider increasing POSITION_SIZE_PCT.`);
+                return false;
+            }
+            
+            log('WARN', `[MIN_NOTIONAL] Disabling scaling-in for this trade to meet minimum notional. Using full position size: $${fullPositionCost.toFixed(2)}.`);
+            initial_quantity = target_quantity;
+            initial_cost = fullPositionCost;
+            useScalingIn = false; // Override for this trade
+        }
         
         // --- REAL TRADE EXECUTION ---
         if (botState.tradingMode === 'REAL_LIVE') {
@@ -1298,8 +1321,6 @@ const tradingEngine = {
                 return false;
             }
         }
-        
-        const initial_cost = initial_quantity * entryPrice;
 
         let stopLoss;
         if (tradeSettings.USE_ATR_STOP_LOSS && pair.atr_15m) {
@@ -1756,11 +1777,12 @@ const startBot = async () => {
             const exchangeInfo = await binanceApiClient.getExchangeInfo();
             exchangeInfo.symbols.forEach(s => {
                 const lotSizeFilter = s.filters.find(f => f.filterType === 'LOT_SIZE');
-                if (lotSizeFilter) {
-                    symbolRules.set(s.symbol, {
-                        stepSize: parseFloat(lotSizeFilter.stepSize)
-                    });
-                }
+                const minNotionalFilter = s.filters.find(f => f.filterType === 'MIN_NOTIONAL');
+                
+                symbolRules.set(s.symbol, {
+                    stepSize: lotSizeFilter ? parseFloat(lotSizeFilter.stepSize) : 1,
+                    minNotional: minNotionalFilter ? parseFloat(minNotionalFilter.minNotional) : 5.0
+                });
             });
             log('INFO', `Cached trading rules for ${symbolRules.size} symbols.`);
         } catch (e) {
