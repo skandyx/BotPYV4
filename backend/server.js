@@ -1,13 +1,3 @@
-
-
-
-
-
-
-
-
-
-
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
@@ -758,9 +748,18 @@ class RealtimeAnalyzer {
                     obv5mCondition = false;
                 }
             }
+
+            let cvd5mCondition = true;
+            if (settings.USE_CVD_FILTER) {
+                cvd5mCondition = pair.conditions?.cvd_5m_trending_up === true;
+            }
+            
             const candleIsValid = new5mCandle.close > triggerPrice && new5mCandle.close > new5mCandle.open;
-            isValid = candleIsValid && obv5mCondition;
-            reason = !candleIsValid ? "5m candle did not confirm" : "5m OBV did not confirm";
+            isValid = candleIsValid && obv5mCondition && cvd5mCondition;
+
+            if (!candleIsValid) reason = "5m candle did not confirm";
+            else if (!obv5mCondition) reason = "5m OBV did not confirm";
+            else if (!cvd5mCondition) reason = "5m CVD did not confirm";
         }
         
         if (isValid) {
@@ -1165,14 +1164,6 @@ const tradingEngine = {
         if (botState.circuitBreakerStatus.startsWith('HALTED') || botState.circuitBreakerStatus.startsWith('PAUSED')) {
             log('WARN', `Trade for ${pair.symbol} blocked: Global Circuit Breaker is active (${botState.circuitBreakerStatus}).`);
             return false;
-        }
-        
-        // --- CVD Filter ---
-        if (tradeSettings.USE_CVD_FILTER) {
-            if (pair.conditions?.cvd_5m_trending_up !== true) {
-                log('TRADE', `[CVD FILTER] Rejected ${pair.symbol}. 5m CVD is not trending up.`);
-                return false;
-            }
         }
         
         // --- Liquidity Filter ---
