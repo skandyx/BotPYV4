@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/mockApi';
-import { Trade, OrderSide, TradingMode, ScannedPair } from '../types';
+import { Trade, OrderSide, TradingMode, ScannedPair, StrategyType } from '../types';
 import Spinner from '../components/common/Spinner';
 import StatCard from '../components/common/StatCard';
 import { useAppContext } from '../contexts/AppContext';
@@ -41,6 +41,20 @@ const getScoreBadgeClass = (score: ScannedPair['score'] | undefined) => {
         case 'HOLD': return 'bg-gray-700 text-gray-200';
         case 'COOLDOWN': return 'bg-blue-800 text-blue-200';
         default: return 'bg-gray-700 text-gray-200';
+    }
+};
+
+const getStrategyDisplayInfo = (strategy?: StrategyType): { icon: string; title: string } => {
+    switch (strategy) {
+        case 'PRECISION':
+            return { icon: '🎯', title: 'Stratégie de Précision' };
+        case 'MOMENTUM':
+            return { icon: '🔥', title: 'Stratégie de Momentum' };
+        case 'IGNITION':
+            return { icon: '🚀', title: 'Stratégie d\'Ignition' };
+        default:
+            // Default for older trades that might not have a type
+            return { icon: '🎯', title: 'Stratégie de Précision' };
     }
 };
 
@@ -296,38 +310,41 @@ const HistoryPage: React.FC = () => {
                     </tr>
                 </thead>
                 <tbody className="bg-[#14181f]/50 divide-y divide-[#2b2f38]">
-                    {filteredAndSortedTrades.map(trade => (
-                        <tr 
-                            key={trade.id}
-                            onClick={() => setSelectedTradeForChart(trade)}
-                            className="hover:bg-[#2b2f38]/50 cursor-pointer transition-colors"
-                        >
-                            <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{trade.symbol}</td>
-                            <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm text-center">
-                                <span className="text-xl" title={trade.strategy_type === 'MOMENTUM' ? 'Momentum' : 'Précision'}>
-                                    {trade.strategy_type === 'MOMENTUM' ? '🔥' : '🎯'}
-                                </span>
-                            </td>
-                            <td className={`px-3 lg:px-6 py-4 whitespace-nowrap text-sm font-bold ${getSideClass(trade.side)}`}>{trade.side}</td>
-                            <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm">
-                                <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${getScoreBadgeClass(trade.entry_snapshot?.score)}`}>
-                                    {trade.entry_snapshot?.score || 'N/A'}
-                                </span>
-                            </td>
-                            <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm font-semibold">
-                                {trade.entry_snapshot?.price_above_ema50_4h === true ? <span className="text-green-400">▲ HAUSSIER</span> : (trade.entry_snapshot?.price_above_ema50_4h === false ? <span className="text-red-400">▼ BAISSIER</span> : <span className="text-gray-500">-</span>)}
-                            </td>
-                            <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-300">{trade.entry_snapshot?.rsi_1h?.toFixed(1) || 'N/A'}</td>
-                            <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-400">{new Date(trade.entry_time).toLocaleString(undefined, dateTimeFormatOptions)}</td>
-                            <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-400">{trade.exit_time ? new Date(trade.exit_time).toLocaleString(undefined, dateTimeFormatOptions) : 'N/A'}</td>
-                            <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-300">${formatPrice(trade.entry_price)}</td>
-                            <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-300">${formatPrice(trade.exit_price)}</td>
-                            <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-300">${formatPrice(trade.stop_loss)}</td>
-                            <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-300">${formatPrice(trade.take_profit)}</td>
-                            <td className={`px-3 lg:px-6 py-4 whitespace-nowrap text-sm font-medium ${getPnlClass(trade.pnl)}`}>${trade.pnl?.toFixed(2) || 'N/A'}</td>
-                            <td className={`px-3 lg:px-6 py-4 whitespace-nowrap text-sm font-medium ${getPnlClass(trade.pnl_pct)}`}>${trade.pnl_pct?.toFixed(2) || 'N/A'}%</td>
-                        </tr>
-                    ))}
+                    {filteredAndSortedTrades.map(trade => {
+                        const { icon: strategyIcon, title: strategyTitle } = getStrategyDisplayInfo(trade.strategy_type);
+                        return (
+                            <tr 
+                                key={trade.id}
+                                onClick={() => setSelectedTradeForChart(trade)}
+                                className="hover:bg-[#2b2f38]/50 cursor-pointer transition-colors"
+                            >
+                                <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{trade.symbol}</td>
+                                <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm text-center">
+                                    <span className="text-xl" title={strategyTitle}>
+                                        {strategyIcon}
+                                    </span>
+                                </td>
+                                <td className={`px-3 lg:px-6 py-4 whitespace-nowrap text-sm font-bold ${getSideClass(trade.side)}`}>{trade.side}</td>
+                                <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm">
+                                    <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${getScoreBadgeClass(trade.entry_snapshot?.score)}`}>
+                                        {trade.entry_snapshot?.score || 'N/A'}
+                                    </span>
+                                </td>
+                                <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm font-semibold">
+                                    {trade.entry_snapshot?.price_above_ema50_4h === true ? <span className="text-green-400">▲ HAUSSIER</span> : (trade.entry_snapshot?.price_above_ema50_4h === false ? <span className="text-red-400">▼ BAISSIER</span> : <span className="text-gray-500">-</span>)}
+                                </td>
+                                <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-300">{trade.entry_snapshot?.rsi_1h?.toFixed(1) || 'N/A'}</td>
+                                <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-400">{new Date(trade.entry_time).toLocaleString(undefined, dateTimeFormatOptions)}</td>
+                                <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-400">{trade.exit_time ? new Date(trade.exit_time).toLocaleString(undefined, dateTimeFormatOptions) : 'N/A'}</td>
+                                <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-300">${formatPrice(trade.entry_price)}</td>
+                                <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-300">${formatPrice(trade.exit_price)}</td>
+                                <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-300">${formatPrice(trade.stop_loss)}</td>
+                                <td className="px-3 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-300">${formatPrice(trade.take_profit)}</td>
+                                <td className={`px-3 lg:px-6 py-4 whitespace-nowrap text-sm font-medium ${getPnlClass(trade.pnl)}`}>${trade.pnl?.toFixed(2) || 'N/A'}</td>
+                                <td className={`px-3 lg:px-6 py-4 whitespace-nowrap text-sm font-medium ${getPnlClass(trade.pnl_pct)}`}>${trade.pnl_pct?.toFixed(2) || 'N/A'}%</td>
+                            </tr>
+                        );
+                    })}
                      {filteredAndSortedTrades.length === 0 && (
                         <tr>
                             <td colSpan={totalColumns} className="text-center py-10 text-gray-500">

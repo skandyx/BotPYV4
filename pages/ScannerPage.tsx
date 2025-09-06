@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ScannedPair, StrategyConditions, BotSettings } from '../types';
+import { ScannedPair, StrategyConditions, BotSettings, StrategyType } from '../types';
 import Spinner from '../components/common/Spinner';
 import { scannerStore } from '../services/scannerStore';
 import { useAppContext } from '../contexts/AppContext';
@@ -32,6 +32,19 @@ const formatVolume = (volume: number | undefined | null): string => {
     if (volume >= 1_000_000) return `${(volume / 1_000_000).toFixed(2)}M`;
     if (volume >= 1_000) return `${(volume / 1_000).toFixed(1)}k`;
     return volume.toFixed(0);
+};
+
+const getStrategyDisplayInfo = (strategy?: StrategyType): { icon: string; title: string } => {
+    switch (strategy) {
+        case 'PRECISION':
+            return { icon: '🎯', title: 'Signal de Précision (Squeeze)' };
+        case 'MOMENTUM':
+            return { icon: '🔥', title: 'Signal de Momentum détecté' };
+        case 'IGNITION':
+            return { icon: '🚀', title: 'Signal d\'Ignition (Pump) détecté' };
+        default:
+            return { icon: '', title: '' };
+    }
 };
 
 const SortableHeader: React.FC<{
@@ -335,11 +348,8 @@ const ScannerPage: React.FC = () => {
                                 return { met: pair.conditions_met_count || 0, total: 8 };
                             })();
 
-                             const strategyIcon = useMemo(() => {
-                                if (pair.strategy_type === 'PRECISION') return '🎯';
-                                if (pair.strategy_type === 'MOMENTUM') return '🔥';
-                                return '';
-                            }, [pair.strategy_type]);
+                            const { icon: strategyIcon, title: strategyTitle } = getStrategyDisplayInfo(pair.strategy_type);
+
 
                             return (
                                 <tr 
@@ -348,7 +358,7 @@ const ScannerPage: React.FC = () => {
                                     className={`hover:bg-[#2b2f38]/50 cursor-pointer transition-colors ${rowClass}`}
                                 >
                                     <td className="px-2 sm:px-4 lg:px-6 py-4 whitespace-nowrap text-center text-xl">
-                                        <span title={pair.strategy_type === 'PRECISION' ? 'Signal de Précision (Squeeze)' : 'Signal de Momentum détecté'}>
+                                        <span title={strategyTitle}>
                                             {strategyIcon}
                                         </span>
                                     </td>
