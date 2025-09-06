@@ -621,6 +621,48 @@ class RealtimeAnalyzer {
         }
     }
     
+    async checkFor1mIgnitionTrigger(symbol, tradeSettings) {
+        if (!tradeSettings.USE_IGNITION_STRATEGY) return false;
+
+        const pair = botState.scannerCache.find(p => p.symbol === symbol);
+        // Don't trigger if a position is already open, on cooldown, or pending confirmation
+        if (!pair || botState.activePositions.some(p => p.symbol === symbol) || botState.recentlyLostSymbols.has(symbol) || botState.pendingConfirmation.has(symbol)) {
+            return false;
+        }
+
+        const klines1m = this.klineData.get(symbol)?.get('1m');
+        if (!klines1m || klines1m.length < 21) return false; // Need some history for volume average
+
+        const triggerCandle = klines1m[klines1m.length - 1];
+        const volumes1m = klines1m.map(k => k.volume);
+        const avgVolume = volumes1m.slice(-21, -1).reduce((sum, v) => sum + v, 0) / 20;
+
+        // Condition 1: Price Spike
+        const priceIncreasePct = ((triggerCandle.close - triggerCandle.open) / triggerCandle.open) * 100;
+        const priceConditionMet = priceIncreasePct >= tradeSettings.IGNITION_PRICE_THRESHOLD_PCT;
+
+        // Condition 2: Volume Spike
+        const volumeMultiplier = avgVolume > 0 ? triggerCandle.volume / avgVolume : 0;
+        const volumeConditionMet = volumeMultiplier >= tradeSettings.IGNITION_VOLUME_MULTIPLIER;
+
+        if (priceConditionMet && volumeConditionMet) {
+            this.log('TRADE', `[IGNITION 🚀 1m] Trigger for ${symbol}! Price Spike: ${priceIncreasePct.toFixed(2)}%, Volume x${volumeMultiplier.toFixed(1)}. Attempting trade.`);
+            
+            // Mark the pair with the correct strategy type before passing to the engine
+            pair.strategy_type = 'IGNITION';
+
+            const tradeOpened = await tradingEngine.evaluateAndOpenTrade(pair, triggerCandle.low, tradeSettings);
+            if (tradeOpened) {
+                pair.is_on_hotlist = false; // An ignition trade consumes the opportunity
+                removeSymbolFromMicroStreams(symbol);
+                broadcast({ type: 'SCANNER_UPDATE', payload: pair });
+            }
+            return true; // Signal that a trade was attempted
+        }
+
+        return false;
+    }
+
     // Phase 2: 1m analysis to find the precision entry for pairs on the Hotlist
     async checkFor1mTrigger(symbol, tradeSettings) {
         const pair = botState.scannerCache.find(p => p.symbol === symbol);
@@ -805,7 +847,7 @@ class RealtimeAnalyzer {
         }
     }
 
-    handleNewKline(symbol, interval, kline) {
+    async handleNewKline(symbol, interval, kline) {
         if(symbol === 'BTCUSDT' && interval === '1m' && kline.closeTime) {
             checkGlobalSafetyRules();
         }
@@ -842,7 +884,7 @@ class RealtimeAnalyzer {
                 }
             }
         } else if (interval === '1m') {
-            // Get correct settings profile for this specific moment for PRECISION trades
+            // Get correct settings profile for this specific moment
             let tradeSettings = { ...botState.settings };
             if (botState.settings.USE_DYNAMIC_PROFILE_SELECTOR) {
                 const pair = botState.scannerCache.find(p => p.symbol === symbol);
@@ -857,14 +899,19 @@ class RealtimeAnalyzer {
                 }
             }
 
-            // Check 1: Look for new PRECISION trade triggers (Momentum is triggered on 15m)
-            this.checkFor1mTrigger(symbol, tradeSettings);
+            // High-priority check for Ignition strategy
+            const ignitionTriggered = await this.checkFor1mIgnitionTrigger(symbol, tradeSettings);
+            
+            if (!ignitionTriggered) {
+                // Check for Precision trade triggers if Ignition did not fire
+                this.checkFor1mTrigger(symbol, tradeSettings);
 
-            // Check 2: Look for scaling-in confirmations on existing trades
-            if (tradeSettings.SCALING_IN_CONFIG && tradeSettings.SCALING_IN_CONFIG.trim() !== '') {
-                const position = botState.activePositions.find(p => p.symbol === symbol && p.is_scaling_in);
-                if (position && kline.close > kline.open) { // Bullish confirmation candle
-                    tradingEngine.scaleInPosition(position, kline.close, tradeSettings);
+                // Check for scaling-in confirmations on existing trades
+                if (tradeSettings.SCALING_IN_CONFIG && tradeSettings.SCALING_IN_CONFIG.trim() !== '') {
+                    const position = botState.activePositions.find(p => p.symbol === symbol && p.is_scaling_in);
+                    if (position && kline.close > kline.open) { // Bullish confirmation candle
+                        tradingEngine.scaleInPosition(position, kline.close, tradeSettings);
+                    }
                 }
             }
         }
@@ -1166,8 +1213,10 @@ const tradingEngine = {
             return false;
         }
         
-        // --- Liquidity Filter ---
-        if (tradeSettings.USE_ORDER_BOOK_LIQUIDITY_FILTER) {
+        const isIgnition = pair.strategy_type === 'IGNITION';
+
+        // --- Liquidity Filter (Bypassed for Ignition) ---
+        if (!isIgnition && tradeSettings.USE_ORDER_BOOK_LIQUIDITY_FILTER) {
             try {
                 const depth = await fetch(`https://api.binance.com/api/v3/depth?symbol=${pair.symbol}&limit=100`).then(res => res.json());
                 const price = pair.price;
@@ -1188,8 +1237,8 @@ const tradingEngine = {
             }
         }
         
-        // --- Sector Correlation Filter ---
-        if (tradeSettings.USE_SECTOR_CORRELATION_FILTER) {
+        // --- Sector Correlation Filter (Bypassed for Ignition) ---
+        if (!isIgnition && tradeSettings.USE_SECTOR_CORRELATION_FILTER) {
             const newTradeSector = getSymbolSector(pair.symbol);
             if (newTradeSector !== 'Other') {
                 const hasOpenTradeInSector = botState.activePositions.some(p => getSymbolSector(p.symbol) === newTradeSector);
@@ -1200,15 +1249,17 @@ const tradingEngine = {
             }
         }
 
-        // --- Correlation Filter ---
-        const correlatedTrades = botState.activePositions.filter(p => p.symbol !== 'BTCUSDT' && p.symbol !== 'ETHUSDT').length;
-        if (correlatedTrades >= tradeSettings.MAX_CORRELATED_TRADES) {
-            log('TRADE', `[CORRELATION FILTER] Skipped trade for ${pair.symbol}. Max correlated trades (${tradeSettings.MAX_CORRELATED_TRADES}) reached.`);
-            return false;
+        // --- Correlation Filter (Bypassed for Ignition) ---
+        if (!isIgnition) {
+            const correlatedTrades = botState.activePositions.filter(p => p.symbol !== 'BTCUSDT' && p.symbol !== 'ETHUSDT').length;
+            if (correlatedTrades >= tradeSettings.MAX_CORRELATED_TRADES) {
+                log('TRADE', `[CORRELATION FILTER] Skipped trade for ${pair.symbol}. Max correlated trades (${tradeSettings.MAX_CORRELATED_TRADES}) reached.`);
+                return false;
+            }
         }
         
-        // --- RSI Safety Filter ---
-        if (tradeSettings.USE_RSI_SAFETY_FILTER) {
+        // --- RSI Safety Filter (Bypassed for Ignition) ---
+        if (!isIgnition && tradeSettings.USE_RSI_SAFETY_FILTER) {
             if (pair.rsi_1h === undefined || pair.rsi_1h === null) {
                 log('TRADE', `[RSI FILTER] Skipped trade for ${pair.symbol}. 1h RSI data not available.`);
                 return false;
@@ -1219,8 +1270,8 @@ const tradingEngine = {
             }
         }
 
-        // --- Parabolic Filter Check ---
-        if (tradeSettings.USE_PARABOLIC_FILTER) {
+        // --- Parabolic Filter Check (Bypassed for Ignition) ---
+        if (!isIgnition && tradeSettings.USE_PARABOLIC_FILTER) {
             const klines1m = realtimeAnalyzer.klineData.get(pair.symbol)?.get('1m');
             if (klines1m && klines1m.length >= tradeSettings.PARABOLIC_FILTER_PERIOD_MINUTES) {
                 const checkPeriodKlines = klines1m.slice(-tradeSettings.PARABOLIC_FILTER_PERIOD_MINUTES);
@@ -1268,7 +1319,7 @@ const tradingEngine = {
         const target_quantity = positionSizeUSD / entryPrice;
 
         const scalingInPercents = (tradeSettings.SCALING_IN_CONFIG || "").split(',').map(p => parseFloat(p.trim())).filter(p => !isNaN(p) && p > 0);
-        let useScalingIn = scalingInPercents.length > 0;
+        let useScalingIn = !isIgnition && scalingInPercents.length > 0;
         
         let initial_quantity = useScalingIn ? (target_quantity * (scalingInPercents[0] / 100)) : target_quantity;
         let initial_cost = initial_quantity * entryPrice;
@@ -1323,7 +1374,10 @@ const tradingEngine = {
         }
 
         let stopLoss;
-        if (tradeSettings.USE_ATR_STOP_LOSS && pair.atr_15m) {
+        if (isIgnition) {
+            // For Ignition, SL is the low of the trigger candle. Flash Trailing SL will manage it from there.
+            stopLoss = slPriceReference;
+        } else if (tradeSettings.USE_ATR_STOP_LOSS && pair.atr_15m) {
             stopLoss = entryPrice - (pair.atr_15m * tradeSettings.ATR_MULTIPLIER);
         } else {
             stopLoss = slPriceReference * (1 - tradeSettings.STOP_LOSS_PCT / 100);
@@ -1360,7 +1414,7 @@ const tradingEngine = {
             trailing_stop_tightened: false,
             is_scaling_in: useScalingIn && scalingInPercents.length > 1,
             current_entry_count: 1,
-            total_entries: scalingInPercents.length,
+            total_entries: useScalingIn ? scalingInPercents.length : 1,
             scaling_in_percents: scalingInPercents,
             strategy_type: pair.strategy_type,
         };
@@ -1506,6 +1560,15 @@ const tradingEngine = {
                 log('TRADE', `[${pos.symbol}] Profit at ${currentR.toFixed(2)}R. Stop Loss moved to Break-even at $${newStopLoss.toFixed(4)}.`);
             }
             
+            // --- Flash Trailing Stop for Ignition Trades (Overrides other trailing logic) ---
+            if (pos.strategy_type === 'IGNITION' && s.USE_FLASH_TRAILING_STOP) {
+                const newTrailingSL = pos.highest_price_since_entry * (1 - s.FLASH_TRAILING_STOP_PCT / 100);
+                if (newTrailingSL > pos.stop_loss) {
+                    pos.stop_loss = newTrailingSL;
+                }
+                return; // IMPORTANT: Skip other trailing logic if flash stop is active
+            }
+
             // --- R-Based Adaptive Trailing Stop ---
             // This logic activates AFTER break-even is hit.
             if (s.USE_ADAPTIVE_TRAILING_STOP && pos.is_at_breakeven && pos.entry_snapshot?.atr_15m) {
