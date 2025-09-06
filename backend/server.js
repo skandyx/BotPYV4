@@ -6,6 +6,8 @@
 
 
 
+
+
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
@@ -355,6 +357,13 @@ const loadData = async () => {
             USE_SECTOR_CORRELATION_FILTER: isTrue('USE_SECTOR_CORRELATION_FILTER'),
             USE_WHALE_MANIPULATION_FILTER: isTrue('USE_WHALE_MANIPULATION_FILTER'),
             WHALE_SPIKE_THRESHOLD_PCT: parseFloat(process.env.WHALE_SPIKE_THRESHOLD_PCT) || 5.0,
+
+            // --- EXPERIMENTAL STRATEGIES ---
+            USE_IGNITION_STRATEGY: isTrue('USE_IGNITION_STRATEGY'),
+            IGNITION_PRICE_THRESHOLD_PCT: parseFloat(process.env.IGNITION_PRICE_THRESHOLD_PCT) || 5.0,
+            IGNITION_VOLUME_MULTIPLIER: parseInt(process.env.IGNITION_VOLUME_MULTIPLIER, 10) || 10,
+            USE_FLASH_TRAILING_STOP: isTrue('USE_FLASH_TRAILING_STOP'),
+            FLASH_TRAILING_STOP_PCT: parseFloat(process.env.FLASH_TRAILING_STOP_PCT) || 1.5,
         };
         await saveData('settings');
     }

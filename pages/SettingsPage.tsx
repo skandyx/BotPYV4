@@ -145,7 +145,12 @@ const tooltips: Record<string, string> = {
     RSI_15M_OVERBOUGHT_THRESHOLD: "Le seuil RSI sur 15 minutes au-delà duquel un signal d'achat sera ignoré.",
     USE_WICK_DETECTION_FILTER: "Filtre Anti-Piège : rejette les signaux d'entrée si la bougie de déclenchement a une mèche supérieure anormalement grande, indiquant un rejet du prix.",
     MAX_UPPER_WICK_PCT: "Le pourcentage maximum de la mèche supérieure par rapport à la taille totale de la bougie. Au-delà de ce seuil, le signal est ignoré.",
-    USE_OBV_5M_VALIDATION: "Confirmation de Volume Multi-Échelles : Exige que la tendance de l'OBV soit également haussière sur l'unité de temps de 5 minutes après la confirmation, pour éviter les divergences."
+    USE_OBV_5M_VALIDATION: "Confirmation de Volume Multi-Échelles : Exige que la tendance de l'OBV soit également haussière sur l'unité de temps de 5 minutes après la confirmation, pour éviter les divergences.",
+    USE_IGNITION_STRATEGY: "Stratégie à haut risque pour détecter les 'pumps' soudains basés sur une explosion de prix et de volume sur une bougie de 1 minute.",
+    IGNITION_PRICE_THRESHOLD_PCT: "Le pourcentage minimum de hausse de prix sur une seule bougie de 1 minute pour déclencher un signal d'Ignition.",
+    IGNITION_VOLUME_MULTIPLIER: "Le multiplicateur de volume requis. Le volume de la bougie de 1 minute doit être ce nombre de fois supérieur à la moyenne récente.",
+    USE_FLASH_TRAILING_STOP: "Active un stop loss suiveur en pourcentage, très serré et réactif, spécifiquement pour les trades Ignition. Recommandé.",
+    FLASH_TRAILING_STOP_PCT: "Le pourcentage en dessous du plus haut prix atteint auquel le stop suiveur sera placé. Ex: 1.5 pour -1.5%.",
 };
 
 const inputClass = "mt-1 block w-full rounded-md border-[#3e4451] bg-[#0c0e12] shadow-sm focus:border-[#f0b90b] focus:ring-[#f0b90b] sm:text-sm text-white";
@@ -325,11 +330,12 @@ const SettingsPage: React.FC = () => {
     const ToggleField: React.FC<{
         id: keyof BotSettings;
         label: string;
-    }> = ({ id, label }) => {
+        disabled?: boolean;
+    }> = ({ id, label, disabled = false }) => {
         if (!settings) return null;
         return (
-            <div className="flex justify-between items-center bg-[#0c0e12]/30 p-3 rounded-lg">
-                <label htmlFor={id} className="flex items-center text-sm font-medium text-gray-300">
+            <div className={`flex justify-between items-center bg-[#0c0e12]/30 p-3 rounded-lg transition-opacity ${disabled ? 'opacity-60' : ''}`}>
+                <label htmlFor={id} className={`flex items-center text-sm font-medium ${disabled ? 'text-gray-500' : 'text-gray-300'}`}>
                     {label}
                     <Tooltip text={tooltips[id]} />
                 </label>
@@ -338,6 +344,7 @@ const SettingsPage: React.FC = () => {
                     onChange={(checked) => handleChange(id, checked)}
                     leftLabel="ON"
                     rightLabel="OFF"
+                    disabled={disabled}
                 />
             </div>
         );
@@ -574,6 +581,42 @@ const SettingsPage: React.FC = () => {
                             <div className={`transition-opacity ${settings.USE_DYNAMIC_POSITION_SIZING ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
                                 <InputField id="STRONG_BUY_POSITION_SIZE_PCT" label="Taille Position 'STRONG BUY' (%)" step="0.1" />
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Experimental Strategies */}
+            <div className="bg-[#2a1e14]/40 border border-[#b45309] rounded-lg p-6 shadow-lg space-y-4">
+                <div className="flex items-start space-x-3">
+                    <div className="flex-shrink-0 pt-0.5">
+                        <svg className="h-6 w-6 text-amber-500" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-semibold text-amber-400">Stratégies Expérimentales (Haut Risque)</h3>
+                        <p className="text-sm text-gray-400 mt-1">
+                            Ces stratégies contournent de nombreux filtres de sécurité pour capturer des mouvements de marché anormaux. Utilisez-les avec une extrême prudence.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="border-t border-amber-800/50 pt-4 space-y-4">
+                    <ToggleField id="USE_IGNITION_STRATEGY" label="Activer la Stratégie d'Ignition 🚀" />
+
+                    <div className={`space-y-4 transition-opacity ${settings.USE_IGNITION_STRATEGY ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+                        <div className="pl-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <InputField id="IGNITION_PRICE_THRESHOLD_PCT" label="Seuil de Hausse de Prix (%)" step="0.1" children={<span className="text-gray-400 text-sm">%</span>}/>
+                                <InputField id="IGNITION_VOLUME_MULTIPLIER" label="Multiplicateur de Volume (x)" step="1" children={<span className="text-gray-400 text-sm">x</span>}/>
+                            </div>
+                        </div>
+
+                        <ToggleField id="USE_FLASH_TRAILING_STOP" label="Activer le Stop Loss Suiveur Éclair ⚡" disabled={!settings.USE_IGNITION_STRATEGY} />
+                        
+                        <div className={`pl-4 transition-opacity ${settings.USE_FLASH_TRAILING_STOP ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+                             <InputField id="FLASH_TRAILING_STOP_PCT" label="Pourcentage du Suiveur Éclair" step="0.1" children={<span className="text-gray-400 text-sm">%</span>}/>
                         </div>
                     </div>
                 </div>

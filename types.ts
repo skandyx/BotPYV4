@@ -29,7 +29,7 @@ export interface FearAndGreed {
     classification: string;
 }
 
-export type StrategyType = 'PRECISION' | 'MOMENTUM';
+export type StrategyType = 'PRECISION' | 'MOMENTUM' | 'IGNITION';
 
 export interface Trade {
   id: number;
@@ -233,4 +233,11 @@ export interface BotSettings {
     USE_SECTOR_CORRELATION_FILTER: boolean;
     USE_WHALE_MANIPULATION_FILTER: boolean;
     WHALE_SPIKE_THRESHOLD_PCT: number; // e.g., 5 for 5% of hourly volume
+
+    // --- EXPERIMENTAL STRATEGIES ---
+    USE_IGNITION_STRATEGY: boolean;
+    IGNITION_PRICE_THRESHOLD_PCT: number;
+    IGNITION_VOLUME_MULTIPLIER: number;
+    USE_FLASH_TRAILING_STOP: boolean;
+    FLASH_TRAILING_STOP_PCT: number;
 }

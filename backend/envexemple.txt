@@ -137,6 +137,18 @@ DAILY_DRAWDOWN_LIMIT_PCT=3.0
 # Nombre de pertes consécutives pour mettre le bot en pause.
 CONSECUTIVE_LOSS_LIMIT=5
 
+# --- EXPERIMENTAL STRATEGIES (USE WITH CAUTION) ---
+# Activer la stratégie d'Ignition pour détecter les pumps. (true/false)
+USE_IGNITION_STRATEGY=false
+# Pourcentage de hausse de prix sur 1m pour un signal Ignition.
+IGNITION_PRICE_THRESHOLD_PCT=5.0
+# Multiplicateur de volume sur 1m pour un signal Ignition.
+IGNITION_VOLUME_MULTIPLIER=10
+# Activer le stop loss suiveur ultra-réactif pour les trades Ignition. (true/false)
+USE_FLASH_TRAILING_STOP=false
+# Pourcentage du stop suiveur éclair.
+FLASH_TRAILING_STOP_PCT=1.5
+
 # --- API CREDENTIALS ---
 BINANCE_API_KEY=votre_cle_api_binance
 BINANCE_SECRET_KEY=votre_cle_secrete_binance
