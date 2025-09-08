@@ -1417,6 +1417,21 @@ const tradingEngine = {
             total_entries: useScalingIn ? scalingInPercents.length : 1,
             scaling_in_percents: scalingInPercents,
             strategy_type: pair.strategy_type,
+            management_settings: {
+                USE_AUTO_BREAKEVEN: tradeSettings.USE_AUTO_BREAKEVEN,
+                BREAKEVEN_TRIGGER_R: tradeSettings.BREAKEVEN_TRIGGER_R,
+                ADJUST_BREAKEVEN_FOR_FEES: tradeSettings.ADJUST_BREAKEVEN_FOR_FEES,
+                TRANSACTION_FEE_PCT: tradeSettings.TRANSACTION_FEE_PCT,
+                USE_ADAPTIVE_TRAILING_STOP: tradeSettings.USE_ADAPTIVE_TRAILING_STOP,
+                ATR_MULTIPLIER: tradeSettings.ATR_MULTIPLIER,
+                TRAILING_STOP_TIGHTEN_THRESHOLD_R: tradeSettings.TRAILING_STOP_TIGHTEN_THRESHOLD_R,
+                TRAILING_STOP_TIGHTEN_MULTIPLIER_REDUCTION: tradeSettings.TRAILING_STOP_TIGHTEN_MULTIPLIER_REDUCTION,
+                USE_FLASH_TRAILING_STOP: tradeSettings.USE_FLASH_TRAILING_STOP,
+                FLASH_TRAILING_STOP_PCT: tradeSettings.FLASH_TRAILING_STOP_PCT,
+                USE_PARTIAL_TAKE_PROFIT: tradeSettings.USE_PARTIAL_TAKE_PROFIT,
+                PARTIAL_TP_TRIGGER_PCT: tradeSettings.PARTIAL_TP_TRIGGER_PCT,
+                PARTIAL_TP_SELL_QTY_PCT: tradeSettings.PARTIAL_TP_SELL_QTY_PCT,
+            }
         };
 
         log('TRADE', `>>> TRADE OPENED (STRATEGY: ${newTrade.strategy_type || 'N/A'}, ENTRY 1/${newTrade.total_entries}) <<< Opening ${botState.tradingMode} trade for ${pair.symbol}: Qty=${initial_quantity.toFixed(4)}, Entry=$${entryPrice}`);
@@ -1516,6 +1531,9 @@ const tradingEngine = {
                 return;
             }
 
+            // Use trade-specific settings with a fallback to global settings for safety/backwards compatibility
+            const s = pos.management_settings || botState.settings;
+
             const currentPrice = priceData.price;
             if (currentPrice > pos.highest_price_since_entry) {
                 pos.highest_price_since_entry = currentPrice;
@@ -1530,8 +1548,6 @@ const tradingEngine = {
                 positionsToClose.push({ trade: pos, exitPrice: pos.take_profit, reason: 'Take Profit' });
                 return;
             }
-
-            const s = botState.settings;
             
             // --- R-Multiple Calculation ---
             let currentR = 0;
@@ -1546,7 +1562,7 @@ const tradingEngine = {
             // --- Partial Take Profit (remains Pct-based as per current implementation) ---
             const pnlPct = ((currentPrice - pos.average_entry_price) / pos.average_entry_price) * 100;
             if (s.USE_PARTIAL_TAKE_PROFIT && !pos.partial_tp_hit && pnlPct >= s.PARTIAL_TP_TRIGGER_PCT) {
-                this.executePartialSell(pos, currentPrice);
+                this.executePartialSell(pos, currentPrice, s);
             }
 
             // --- R-Based Auto Break-even ---
@@ -1710,12 +1726,12 @@ const tradingEngine = {
         return trade;
     },
     
-    executePartialSell(position, currentPrice) {
+    executePartialSell(position, currentPrice, settings) {
         // Note: Real partial sells are not implemented for simplicity.
         // This logic only applies to VIRTUAL mode.
         if (position.mode !== 'VIRTUAL') return;
 
-        const s = botState.settings;
+        const s = settings;
         const initialQty = position.target_quantity;
         const sellQty = initialQty * (s.PARTIAL_TP_SELL_QTY_PCT / 100);
         const pnlFromSale = (currentPrice - position.average_entry_price) * sellQty;

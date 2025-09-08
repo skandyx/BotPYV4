@@ -65,6 +65,23 @@ export interface Trade {
   total_entries?: number;
   scaling_in_percents?: number[]; // For flexible scaling in
   strategy_type?: StrategyType; // New: Which strategy triggered the trade
+
+  // Management settings snapshotted at trade entry
+  management_settings?: {
+      USE_AUTO_BREAKEVEN: boolean;
+      BREAKEVEN_TRIGGER_R: number;
+      ADJUST_BREAKEVEN_FOR_FEES: boolean;
+      TRANSACTION_FEE_PCT: number;
+      USE_ADAPTIVE_TRAILING_STOP: boolean;
+      ATR_MULTIPLIER: number;
+      TRAILING_STOP_TIGHTEN_THRESHOLD_R: number;
+      TRAILING_STOP_TIGHTEN_MULTIPLIER_REDUCTION: number;
+      USE_FLASH_TRAILING_STOP: boolean;
+      FLASH_TRAILING_STOP_PCT: number;
+      USE_PARTIAL_TAKE_PROFIT: boolean;
+      PARTIAL_TP_TRIGGER_PCT: number;
+      PARTIAL_TP_SELL_QTY_PCT: number;
+  };
 }
 
 export interface StrategyConditions {
